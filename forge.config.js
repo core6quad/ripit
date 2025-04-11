@@ -4,7 +4,7 @@ const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 module.exports = {
   packagerConfig: {
     asar: true,
-    icon: './icon', // Specify the base name of the icon files (without extension)
+    icon: process.platform === 'darwin' ? './icons/icon.icns' : './icons/icon',
   },
   rebuildConfig: {},
   makers: [
