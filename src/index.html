@@ -67,7 +67,10 @@
               (res) =>
                 `<label>
                   <input type="radio" name="quality" data-format="${res.format}" value="${res.resolution}" />
-                  ${res.resolution} (${res.size})
+                  ${res.resolution === 'audio only' 
+                    ? `<img src="../icons/audio.svg" style="height: 1em; vertical-align: middle; margin-right: 4px;" />`
+                    : ''
+                  }${res.resolution} (${res.size})
                 </label><br />`
             )
             .join('');
