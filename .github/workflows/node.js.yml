@@ -1,12 +1,8 @@
-            - name: Electron Builder
+            - name: Z Electron Builder
   # You may pin to the exact commit or the version.
-  # uses: paneron/action-electron-builder@14b133702d1b2e9749912051c43ed62b4afe56c8
-  uses: paneron/action-electron-builder@v1.8.1
+  # uses: 0fatal/z-electron-builder@4d27b5c5660a9aaf107983c710b7b35fd383a49c
+  uses: 0fatal/z-electron-builder@v0.0.2
   with:
-    # Whether to skip package manager install
-    skip_package_manager_install: # optional
-    # Package manager to use (`pnpm | yarn | npm`)
-    package_manager: # optional, default is yarn
     # GitHub authentication token
     github_token: 
     # Base64-encoded code signing certificate for macOS
