@@ -4,6 +4,32 @@
     <meta charset="UTF-8" />
     <title>Ripit</title>
     <link rel="stylesheet" href="index.css" />
+    <style>
+      @keyframes progress-animation {
+        from {
+          background-position: 0 0;
+        }
+        to {
+          background-position: 29px 0;
+        }
+      }
+
+      .encoding-progress {
+        background-color: #007bff !important;
+        background-image: linear-gradient(
+          45deg,
+          rgba(255, 255, 255, 0.15) 25%,
+          transparent 25%,
+          transparent 50%,
+          rgba(255, 255, 255, 0.15) 50%,
+          rgba(255, 255, 255, 0.15) 75%,
+          transparent 75%,
+          transparent
+        );
+        background-size: 29px 29px;
+        animation: progress-animation 1s linear infinite;
+      }
+    </style>
   </head>
   <body>
     <h1>Ripit</h1>
@@ -14,95 +40,38 @@
       <progress id="progressBar" value="0" max="100" style="width: 100%; display: none;"></progress>
       <p id="progressDetails" style="display: none;">0% | ETA: -- | Speed: --</p>
     </div>
+    <div>
+      <a href="settings.html" id="settingsLink">Settings</a>
+    </div>
     <div id="qualityDialog" style="display: none; border: 1px solid #ccc; padding: 1rem; background: #f9f9f9;">
-      <h3>Select Video Quality</h3>
+      <h3 id="selectQualityTitle">Select Quality</h3>
+      <div style="margin-bottom: 1rem;">
+        <label style="margin-right: 1rem;">
+          <input type="radio" name="downloadMode" value="video" checked /> <span id="videoModeLabel">Video</span>
+        </label>
+        <label>
+          <input type="radio" name="downloadMode" value="audio" /> <span id="audioModeLabel">Audio only (MP3)</span>
+        </label>
+      </div>
       <div id="resolutionOptions">
-        <p>Loading available resolutions...</p>
+        <p id="loadingOptions">Loading available options...</p>
       </div>
       <button id="confirmQualityButton" disabled>Confirm</button>
     </div>
     <p id="statusText" style="margin-top: 1rem;">Idle</p>
     <script>
-      let lastUpdateTime = 0;
+      async function loadTranslations() {
+        const translations = await window.electronAPI.getTranslations();
 
-      function isValidUrl(url) {
-        try {
-          new URL(url);
-          return true;
-        } catch {
-          return false;
-        }
-      }
-
-      function isYouTubeUrl(url) {
-        const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+$/;
-        return youtubeRegex.test(url);
-      }
-
-      async function populateResolutions(url) {
-        const resolutionOptions = document.getElementById('resolutionOptions');
-        const confirmButton = document.getElementById('confirmQualityButton');
-        resolutionOptions.innerHTML = '<p>Loading available resolutions...</p>';
-        confirmButton.disabled = true;
-        try {
-          console.log(`Fetching resolutions for URL: ${url}`);
-          const resolutions = await window.electronAPI.fetchVideoResolutions(url);
-          console.log('Fetched resolutions:', resolutions);
-
-          const uniqueResolutions = resolutions.filter(
-            (res, index, self) =>
-              index === self.findIndex((r) => r.resolution === res.resolution)
-          );
-          console.log('Unique resolutions:', uniqueResolutions);
-
-          if (uniqueResolutions.length === 0) {
-            resolutionOptions.innerHTML = '<p>No supported resolutions available.</p>';
-            console.log('No supported resolutions available.');
-            return;
+        // Update all translatable elements
+        Object.keys(translations).forEach(key => {
+          const element = document.getElementById(key);
+          if (element) {
+            element.textContent = translations[key];
           }
+        });
 
-          resolutionOptions.innerHTML = uniqueResolutions
-            .map(
-              (res) =>
-                `<label>
-                  <input type="radio" name="quality" data-format="${res.format}" value="${res.resolution}" />
-                  ${res.resolution === 'audio only' 
-                    ? `<img src="../icons/audio.svg" style="height: 1em; vertical-align: middle; margin-right: 4px;" />`
-                    : ''
-                  }${res.resolution} (${res.size})
-                </label><br />`
-            )
-            .join('');
-          confirmButton.disabled = false;
-          console.log('Resolution options populated.');
-        } catch (error) {
-          resolutionOptions.innerHTML = '<p>Failed to load resolutions.</p>';
-          console.error('Error fetching resolutions:', error);
-        }
-      }
-
-      function updateProgress({ progress, eta, speed }) {
-        const progressBar = document.getElementById('progressBar');
-        const progressDetails = document.getElementById('progressDetails');
-        const statusText = document.getElementById('statusText');
-
-        console.log('Updating progress bar with data:', { progress, eta, speed });
-
-        // Ensure progress is a valid number
-        const validProgress = isFinite(progress) ? progress : 0;
-
-        progressBar.value = validProgress;
-        progressDetails.textContent = `${validProgress.toFixed(2)}% | ETA: ${eta} | Speed: ${speed}`;
-        progressDetails.style.display = 'block';
-
-        if (validProgress === 100) {
-          progressBar.value = 100; // Force update to 100%
-          progressBar.style.backgroundColor = 'green';
-          statusText.textContent = 'Download complete!';
-          console.log('Download complete!');
-        } else {
-          statusText.textContent = 'Downloading...';
-        }
+        window.translations = translations;
       }
 
       function resetProgressBar() {
@@ -118,86 +87,223 @@
         statusText.textContent = 'Idle';
       }
 
-      document
-        .getElementById('downloadButton')
-        .addEventListener('click', async () => {
-          resetProgressBar(); // Reset progress bar before starting a new download
+      function setStatusText(message) {
+        const statusText = document.getElementById('statusText');
+        statusText.textContent = message;
+      }
+
+      function isYouTubeMusicUrl(url) {
+        return url.includes('music.youtube.com');
+      }
+
+      async function populateResolutions(url) {
+        const resolutionOptions = document.getElementById('resolutionOptions');
+        const confirmButton = document.getElementById('confirmQualityButton');
+        const isMusicUrl = isYouTubeMusicUrl(url);
+        
+        // Force audio mode for YouTube Music URLs
+        if (isMusicUrl) {
+          document.querySelector('input[name="downloadMode"][value="audio"]').checked = true;
+          document.querySelector('input[name="downloadMode"][value="video"]').disabled = true;
+        } else {
+          document.querySelector('input[name="downloadMode"][value="video"]').disabled = false;
+        }
+
+        resolutionOptions.innerHTML = '<p id="loadingOptions">Loading available options...</p>';
+        confirmButton.disabled = true;
+        try {
+          setStatusText('Running binary');
+          const { videoFormats, audioFormats } = await window.electronAPI.fetchVideoResolutions(url);
+          setStatusText('Idle');
+
+          const isAudioMode = document.querySelector('input[name="downloadMode"][value="audio"]').checked;
+          
+          let html = '';
+          if (!isAudioMode) {
+            html += '<div class="video-formats"><h4>Video Quality</h4>';
+            videoFormats.forEach((res) => {
+              html += `
+                <label>
+                  <input type="radio" name="videoQuality" data-format="${res.format}" value="${res.resolution}" />
+                  ${res.resolution} (${res.size})
+                </label><br />`;
+            });
+            html += '</div>';
+          }
+
+          html += `<div class="audio-formats"><h4>${isAudioMode ? 'Audio Quality' : 'Audio Tracks'}</h4>`;
+          audioFormats.forEach((res) => {
+            html += `
+              <label>
+                <input type="${isAudioMode ? 'radio' : 'checkbox'}" name="audioTracks" data-format="${res.format}" />
+                <img src="../icons/audio.svg" style="height: 1em; vertical-align: middle; margin-right: 4px;" />
+                ${res.description} (${res.size})
+              </label><br />`;
+          });
+
+          // Only show captions section in video mode
+          if (!isAudioMode) {
+            html += '</div><div class="caption-options"><h4>Captions</h4>';
+            html += `
+              <div>
+                <label><input type="checkbox" id="downloadCaptions" checked /> Download captions</label><br/>
+                <div id="captionOptions" style="margin-left: 20px;">
+                  <label><input type="checkbox" id="embedCaptions" checked /> Embed captions in video file</label><br/>
+                  <div>Languages (comma-separated codes, e.g. "en,ru,de"):</div>
+                  <input type="text" id="captionLangs" value="en,ru" style="width: 100%; margin: 4px 0;" />
+                </div>
+              </div>`;
+          }
+
+          html += '</div>';
+          resolutionOptions.innerHTML = html;
+
+          // Add mode switch handler
+          document.querySelectorAll('input[name="downloadMode"]').forEach(radio => {
+            radio.addEventListener('change', () => populateResolutions(url));
+          });
+
+          // Add caption options toggle if in video mode
+          if (!isAudioMode) {
+            document.getElementById('downloadCaptions').addEventListener('change', (e) => {
+              document.getElementById('captionOptions').style.display = e.target.checked ? 'block' : 'none';
+            });
+          }
+
+          confirmButton.disabled = false;
+
+          document.getElementById('confirmQualityButton').addEventListener('click', async () => {
+            const isAudioMode = document.querySelector('input[name="downloadMode"][value="audio"]').checked;
+            
+            if (isAudioMode) {
+              const selectedAudio = document.querySelector('input[name="audioTracks"]:checked');
+              if (!selectedAudio) {
+                alert(window.translations.selectAudioQualityError);
+                return;
+              }
+              const audioFormat = selectedAudio.getAttribute('data-format');
+              const savePath = await window.electronAPI.promptSaveLocation();
+              
+              if (savePath) {
+                qualityDialog.style.display = 'none';
+                progressBar.style.display = 'block';
+                progressDetails.style.display = 'block';
+
+                console.log('Starting audio download...', { audioFormat });
+                window.electronAPI.downloadYouTubeVideo(
+                  url, 
+                  savePath, 
+                  audioFormat,  // Use selected format instead of 'bestaudio'
+                  [], 
+                  null,
+                  true
+                );
+              }
+            } else {
+              const selectedVideo = document.querySelector('input[name="videoQuality"]:checked');
+              const selectedAudioTracks = Array.from(document.querySelectorAll('input[name="audioTracks"]:checked'))
+                .map(checkbox => checkbox.getAttribute('data-format'));
+
+              // Get caption options
+              const downloadCaptions = document.getElementById('downloadCaptions').checked;
+              const embedCaptions = document.getElementById('embedCaptions').checked;
+              const selectedLangs = document.getElementById('captionLangs').value
+                .split(',')
+                .map(lang => lang.trim())
+                .filter(lang => lang); // Filter out empty strings
+
+              if (!selectedVideo || selectedAudioTracks.length === 0) {
+                alert(window.translations.selectVideoAndAudioError);
+                return;
+              }
+
+              const videoFormat = selectedVideo.getAttribute('data-format');
+              const savePath = await window.electronAPI.promptSaveLocation();
+              
+              if (savePath) {
+                qualityDialog.style.display = 'none';
+                progressBar.style.display = 'block';
+                progressDetails.style.display = 'block';
+
+                console.log('Starting download...', { 
+                  videoFormat, 
+                  audioTracks: selectedAudioTracks,
+                  captions: downloadCaptions ? {
+                    embed: embedCaptions,
+                    languages: selectedLangs
+                  } : null
+                });
+                
+                window.electronAPI.downloadYouTubeVideo(
+                  url, 
+                  savePath, 
+                  videoFormat, 
+                  selectedAudioTracks,
+                  downloadCaptions ? {
+                    embed: embedCaptions,
+                    languages: selectedLangs
+                  } : null
+                );
+              }
+            }
+          });
+        } catch (error) {
+          setStatusText('Idle');
+          resolutionOptions.innerHTML = '<p>Failed to load resolutions.</p>';
+          console.error('Error fetching resolutions:', error);
+        }
+      }
+
+      document.addEventListener('DOMContentLoaded', () => {
+        loadTranslations();
+
+        document.getElementById('downloadButton').addEventListener('click', async () => {
+          resetProgressBar();
           const url = document.getElementById('urlInput').value;
-          console.log(`URL entered: ${url}`);
+
+          // Validate URL
+          if (!url.includes('youtube.com') && !url.includes('youtu.be')) {
+            const errorMessage = document.getElementById('errorMessage');
+            errorMessage.style.display = 'block';
+            return;
+          }
+
+          console.log(`URL: ${url}`);
           const errorMessage = document.getElementById('errorMessage');
           const qualityDialog = document.getElementById('qualityDialog');
-          if (isValidUrl(url)) {
-            if (isYouTubeUrl(url)) {
-              console.log('Valid YouTube URL detected.');
-              errorMessage.style.display = 'none';
 
-              qualityDialog.style.display = 'block';
-              await populateResolutions(url);
-
-              document
-                .getElementById('confirmQualityButton')
-                .addEventListener('click', async () => {
-                  const selectedRadio = document.querySelector('input[name="quality"]:checked');
-                  const selectedFormat = selectedRadio ? selectedRadio.getAttribute('data-format') : null;
-                  const selectedResolution = selectedRadio ? selectedRadio.value : null;
-
-                  if (!selectedFormat || !selectedResolution) {
-                    alert('Please select a resolution.');
-                    console.log('No resolution or format selected.');
-                    return;
-                  }
-
-                  console.log(`Selected format: ${selectedFormat}, resolution: ${selectedResolution}`);
-                  const savePath = await window.electronAPI.promptSaveLocation();
-                  console.log(`Save path selected: ${savePath}`);
-                  if (savePath) {
-                    const progressBar = document.getElementById('progressBar');
-                    const progressDetails = document.getElementById('progressDetails');
-                    qualityDialog.style.display = 'none'; // Close the dialog
-                    progressBar.style.display = 'block';
-                    progressDetails.style.display = 'block';
-
-                    console.log('Starting download...');
-                    window.electronAPI.downloadYouTubeVideo(url, savePath, selectedFormat, selectedResolution);
-                  }
-                });
-            } else {
-              console.log('Invalid YouTube URL.');
-              errorMessage.textContent = 'This URL is not a valid YouTube link.';
-              errorMessage.style.display = 'block';
-            }
-          } else {
-            console.log('Invalid URL entered.');
-            errorMessage.textContent = 'Invalid URL';
-            errorMessage.style.display = 'block';
-          }
+          errorMessage.style.display = 'none';
+          qualityDialog.style.display = 'block';
+          await populateResolutions(url);
         });
 
-      window.electronAPI.onDownloadProgress((data) => {
-        const progressBar = document.getElementById('progressBar');
-        const progressDetails = document.getElementById('progressDetails');
-        const statusText = document.getElementById('statusText');
+        window.electronAPI.onDownloadProgress((data) => {
+          console.log('Progress update received:', data);
+          const progressBar = document.getElementById('progressBar');
+          const progressDetails = document.getElementById('progressDetails');
+          const statusText = document.getElementById('statusText');
 
-        console.log('Updating progress bar with data:', data);
+          progressBar.style.display = 'block';
+          progressDetails.style.display = 'block';
+          
+          // Check if we're in the ffmpeg phase
+          if (data.status === 'encoding') {
+            progressBar.classList.add('encoding-progress');
+            statusText.textContent = window.translations.encodingStatus;
+          } else {
+            progressBar.classList.remove('encoding-progress');
+            statusText.textContent = window.translations.downloadingStatus;
+          }
+          
+          progressBar.value = data.progress;
+          progressDetails.textContent = `${data.progress.toFixed(1)}% | ETA: ${data.eta} | Speed: ${data.speed}`;
 
-        const validProgress = isFinite(data.progress) ? data.progress : 0;
-
-        progressBar.value = validProgress;
-        progressDetails.textContent = `${validProgress.toFixed(2)}% | ETA: ${data.eta} | Speed: ${data.speed}`;
-        progressDetails.style.display = 'block';
-
-        if (validProgress === 100) {
-          progressBar.style.backgroundColor = 'green';
-          statusText.textContent = 'Download complete!';
-          console.log('Download complete!');
-        } else {
-          statusText.textContent = 'Downloading...';
-        }
-      });
-
-      window.electronAPI.onDownloadError((message) => {
-        alert(`Error: ${message}`);
-        resetProgressBar(); // Reset progress bar on error
+          if (data.progress === 100) {
+            progressBar.style.backgroundColor = 'green';
+            progressBar.classList.remove('encoding-progress');
+            statusText.textContent = window.translations.downloadComplete;
+          }
+        });
       });
     </script>
   </body>

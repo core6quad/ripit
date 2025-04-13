@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Settings</title>
+    <link rel="stylesheet" href="index.css" />
+  </head>
+  <body>
+    <h1>Settings</h1>
+    <div>
+      <h3>Default Download Path</h3>
+      <label>
+        <input type="radio" name="downloadPathOption" value="ask" /> Ask each time
+      </label>
+      <label>
+        <input type="radio" name="downloadPathOption" value="default" /> Use default path:
+      </label>
+      <input type="text" id="defaultDownloadPath" placeholder="Enter default path" disabled />
+      <button id="browseDownloadPathButton" disabled>Browse</button>
+    </div>
+    <div>
+      <h3>YT-DLP Binary</h3>
+      <label>
+        <input type="radio" name="ytDlpOption" value="auto" /> Download automatically
+      </label>
+      <label>
+        <input type="radio" name="ytDlpOption" value="custom" /> Use custom binary:
+      </label>
+      <input type="text" id="ytDlpPath" placeholder="Select YT-DLP binary" disabled />
+      <button id="browseYtDlpButton" disabled>Browse</button>
+    </div>
+    <div>
+      <h3>FFmpeg Binary</h3>
+      <label>
+        <input type="radio" name="ffmpegOption" value="auto" /> Download automatically
+      </label>
+      <label>
+        <input type="radio" name="ffmpegOption" value="custom" /> Use custom binary:
+      </label>
+      <input type="text" id="ffmpegPath" placeholder="Select FFmpeg binary" disabled />
+      <button id="browseFfmpegButton" disabled>Browse</button>
+    </div>
+    <div>
+      <h3>Language</h3>
+      <label>
+        <input type="radio" name="languageOption" value="system" checked /> Use system's language
+      </label>
+      <label>
+        <input type="radio" name="languageOption" value="custom" /> Choose:
+      </label>
+      <select id="languageSelect" disabled>
+        <option value="en">English</option>
+        <option value="ru">Русский</option>
+      </select>
+    </div>
+    <div>
+      <button id="saveSettingsButton">Save</button>
+      <a href="index.html">Back to Home</a>
+    </div>
+    <footer style="margin-top: 2rem; text-align: center; font-size: 0.9rem; color: #666;">
+      <p>by <strong>core6quad</strong></p>
+      <p>
+        <a href="#" id="githubLink" style="color: #007bff; text-decoration: none;">
+          GitHub Repository
+        </a>
+      </p>
+    </footer>
+    <script>
+      const defaultDownloadPathInput = document.getElementById('defaultDownloadPath');
+      const browseDownloadPathButton = document.getElementById('browseDownloadPathButton');
+      const ytDlpPathInput = document.getElementById('ytDlpPath');
+      const browseYtDlpButton = document.getElementById('browseYtDlpButton');
+      const ffmpegPathInput = document.getElementById('ffmpegPath');
+      const browseFfmpegButton = document.getElementById('browseFfmpegButton');
+      const languageSelect = document.getElementById('languageSelect');
+
+      document.querySelectorAll('input[name="downloadPathOption"]').forEach((radio) => {
+        radio.addEventListener('change', () => {
+          const isDefault = radio.value === 'default';
+          defaultDownloadPathInput.disabled = !isDefault;
+          browseDownloadPathButton.disabled = !isDefault;
+        });
+      });
+
+      document.querySelectorAll('input[name="ytDlpOption"]').forEach((radio) => {
+        radio.addEventListener('change', () => {
+          const isCustom = radio.value === 'custom';
+          ytDlpPathInput.disabled = !isCustom;
+          browseYtDlpButton.disabled = !isCustom;
+        });
+      });
+
+      document.querySelectorAll('input[name="ffmpegOption"]').forEach((radio) => {
+        radio.addEventListener('change', () => {
+          const isCustom = radio.value === 'custom';
+          ffmpegPathInput.disabled = !isCustom;
+          browseFfmpegButton.disabled = !isCustom;
+        });
+      });
+
+      document.querySelectorAll('input[name="languageOption"]').forEach((radio) => {
+        radio.addEventListener('change', () => {
+          languageSelect.disabled = radio.value !== 'custom';
+        });
+      });
+
+      browseDownloadPathButton.addEventListener('click', async () => {
+        const path = await window.electronAPI.browseForFolder();
+        if (path) defaultDownloadPathInput.value = path;
+      });
+
+      browseYtDlpButton.addEventListener('click', async () => {
+        const path = await window.electronAPI.browseForFile();
+        if (path) ytDlpPathInput.value = path;
+      });
+
+      browseFfmpegButton.addEventListener('click', async () => {
+        const path = await window.electronAPI.browseForFile();
+        if (path) ffmpegPathInput.value = path;
+      });
+
+      document.getElementById('saveSettingsButton').addEventListener('click', () => {
+        const settings = {
+          downloadPathOption: document.querySelector('input[name="downloadPathOption"]:checked').value,
+          defaultDownloadPath: defaultDownloadPathInput.value,
+          ytDlpOption: document.querySelector('input[name="ytDlpOption"]:checked').value,
+          ytDlpPath: ytDlpPathInput.value,
+          ffmpegOption: document.querySelector('input[name="ffmpegOption"]:checked').value,
+          ffmpegPath: ffmpegPathInput.value,
+          languageOption: document.querySelector('input[name="languageOption"]:checked').value,
+          customLanguage: languageSelect.value,
+        };
+        window.electronAPI.saveSettings(settings);
+        alert('Settings saved!');
+      });
+
+      // Load settings on page load
+      window.electronAPI.loadSettings().then((settings) => {
+        document.querySelector(`input[name="downloadPathOption"][value="${settings.downloadPathOption}"]`).checked = true;
+        defaultDownloadPathInput.value = settings.defaultDownloadPath || '';
+        defaultDownloadPathInput.disabled = settings.downloadPathOption !== 'default';
+        browseDownloadPathButton.disabled = settings.downloadPathOption !== 'default';
+
+        document.querySelector(`input[name="ytDlpOption"][value="${settings.ytDlpOption}"]`).checked = true;
+        ytDlpPathInput.value = settings.ytDlpPath || '';
+        ytDlpPathInput.disabled = settings.ytDlpOption !== 'custom';
+        browseYtDlpButton.disabled = settings.ytDlpOption !== 'custom';
+
+        document.querySelector(`input[name="ffmpegOption"][value="${settings.ffmpegOption}"]`).checked = true;
+        ffmpegPathInput.value = settings.ffmpegPath || '';
+        ffmpegPathInput.disabled = settings.ffmpegOption !== 'custom';
+        browseFfmpegButton.disabled = settings.ffmpegOption !== 'custom';
+
+        document.querySelector(`input[name="languageOption"][value="${settings.languageOption}"]`).checked = true;
+        languageSelect.value = settings.customLanguage || 'en';
+        languageSelect.disabled = settings.languageOption !== 'custom';
+      });
+
+      document.getElementById('githubLink').addEventListener('click', () => {
+        window.electronAPI.openExternal('https://github.com/core6quad/ripit');
+      });
+    </script>
+  </body>
+</html>

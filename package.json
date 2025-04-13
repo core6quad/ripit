@@ -1,6 +1,6 @@
 {
-  "name": "uniget",
-  "productName": "uniget",
+  "name": "ripit",
+  "productName": "ripit",
   "version": "1.0.0",
   "description": "My Electron application description",
   "main": "src/index.js",
@@ -18,7 +18,10 @@
   },
   "license": "MIT",
   "dependencies": {
-    "electron-squirrel-startup": "^1.0.1"
+    "electron-squirrel-startup": "^1.0.1",
+    "extract-zip": "^2.0.1",
+    "tar": "^6.1.11",
+    "fs-extra": "^11.1.1"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.8.0",
