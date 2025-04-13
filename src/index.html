@@ -44,9 +44,17 @@
       <a href="settings.html" id="settingsLink">Settings</a>
     </div>
     <div id="qualityDialog" style="display: none; border: 1px solid #ccc; padding: 1rem; background: #f9f9f9;">
-      <h3>Select Video Quality</h3>
+      <h3 id="selectQualityTitle">Select Quality</h3>
+      <div style="margin-bottom: 1rem;">
+        <label style="margin-right: 1rem;">
+          <input type="radio" name="downloadMode" value="video" checked /> <span id="videoModeLabel">Video</span>
+        </label>
+        <label>
+          <input type="radio" name="downloadMode" value="audio" /> <span id="audioModeLabel">Audio only (MP3)</span>
+        </label>
+      </div>
       <div id="resolutionOptions">
-        <p>Loading available resolutions...</p>
+        <p id="loadingOptions">Loading available options...</p>
       </div>
       <button id="confirmQualityButton" disabled>Confirm</button>
     </div>
@@ -55,14 +63,15 @@
       async function loadTranslations() {
         const translations = await window.electronAPI.getTranslations();
 
-        document.title = translations.title;
-        document.getElementById('downloadButton').textContent = translations.downloadButton;
-        document.getElementById('settingsLink').textContent = translations.settingsLink;
-        document.getElementById('errorMessage').textContent = translations.invalidUrl;
-        document.getElementById('confirmQualityButton').textContent = translations.confirmButton;
-        setStatusText(translations.idleStatus);
+        // Update all translatable elements
+        Object.keys(translations).forEach(key => {
+          const element = document.getElementById(key);
+          if (element) {
+            element.textContent = translations[key];
+          }
+        });
 
-        window.translations = translations; // Store translations globally for reuse
+        window.translations = translations;
       }
 
       function resetProgressBar() {
@@ -83,104 +92,159 @@
         statusText.textContent = message;
       }
 
+      function isYouTubeMusicUrl(url) {
+        return url.includes('music.youtube.com');
+      }
+
       async function populateResolutions(url) {
         const resolutionOptions = document.getElementById('resolutionOptions');
         const confirmButton = document.getElementById('confirmQualityButton');
-        resolutionOptions.innerHTML = '<p>Loading available resolutions...</p>';
+        const isMusicUrl = isYouTubeMusicUrl(url);
+        
+        // Force audio mode for YouTube Music URLs
+        if (isMusicUrl) {
+          document.querySelector('input[name="downloadMode"][value="audio"]').checked = true;
+          document.querySelector('input[name="downloadMode"][value="video"]').disabled = true;
+        } else {
+          document.querySelector('input[name="downloadMode"][value="video"]').disabled = false;
+        }
+
+        resolutionOptions.innerHTML = '<p id="loadingOptions">Loading available options...</p>';
         confirmButton.disabled = true;
         try {
           setStatusText('Running binary');
           const { videoFormats, audioFormats } = await window.electronAPI.fetchVideoResolutions(url);
           setStatusText('Idle');
 
-          let html = '<div class="video-formats"><h4>Video Quality</h4>';
+          const isAudioMode = document.querySelector('input[name="downloadMode"][value="audio"]').checked;
           
-          videoFormats.forEach((res) => {
-            html += `
-              <label>
-                <input type="radio" name="videoQuality" data-format="${res.format}" value="${res.resolution}" />
-                ${res.resolution} (${res.size})
-              </label><br />`;
-          });
+          let html = '';
+          if (!isAudioMode) {
+            html += '<div class="video-formats"><h4>Video Quality</h4>';
+            videoFormats.forEach((res) => {
+              html += `
+                <label>
+                  <input type="radio" name="videoQuality" data-format="${res.format}" value="${res.resolution}" />
+                  ${res.resolution} (${res.size})
+                </label><br />`;
+            });
+            html += '</div>';
+          }
 
-          html += '</div><div class="audio-formats"><h4>Audio Tracks</h4>';
-          
+          html += `<div class="audio-formats"><h4>${isAudioMode ? 'Audio Quality' : 'Audio Tracks'}</h4>`;
           audioFormats.forEach((res) => {
             html += `
               <label>
-                <input type="checkbox" name="audioTracks" data-format="${res.format}" />
+                <input type="${isAudioMode ? 'radio' : 'checkbox'}" name="audioTracks" data-format="${res.format}" />
                 <img src="../icons/audio.svg" style="height: 1em; vertical-align: middle; margin-right: 4px;" />
                 ${res.description} (${res.size})
               </label><br />`;
           });
 
-          // Add caption options
-          html += '</div><div class="caption-options"><h4>Captions</h4>';
-          html += `
-            <div>
-              <label><input type="checkbox" id="downloadCaptions" checked /> Download captions</label><br/>
-              <div id="captionOptions" style="margin-left: 20px;">
-                <label><input type="checkbox" id="embedCaptions" checked /> Embed captions in video file</label><br/>
-                <div>Languages (comma-separated codes, e.g. "en,ru,de"):</div>
-                <input type="text" id="captionLangs" value="en,ru" style="width: 100%; margin: 4px 0;" />
-              </div>
-            </div>`;
+          // Only show captions section in video mode
+          if (!isAudioMode) {
+            html += '</div><div class="caption-options"><h4>Captions</h4>';
+            html += `
+              <div>
+                <label><input type="checkbox" id="downloadCaptions" checked /> Download captions</label><br/>
+                <div id="captionOptions" style="margin-left: 20px;">
+                  <label><input type="checkbox" id="embedCaptions" checked /> Embed captions in video file</label><br/>
+                  <div>Languages (comma-separated codes, e.g. "en,ru,de"):</div>
+                  <input type="text" id="captionLangs" value="en,ru" style="width: 100%; margin: 4px 0;" />
+                </div>
+              </div>`;
+          }
 
           html += '</div>';
           resolutionOptions.innerHTML = html;
-          
-          // Add caption options toggle
-          document.getElementById('downloadCaptions').addEventListener('change', (e) => {
-            document.getElementById('captionOptions').style.display = e.target.checked ? 'block' : 'none';
+
+          // Add mode switch handler
+          document.querySelectorAll('input[name="downloadMode"]').forEach(radio => {
+            radio.addEventListener('change', () => populateResolutions(url));
           });
+
+          // Add caption options toggle if in video mode
+          if (!isAudioMode) {
+            document.getElementById('downloadCaptions').addEventListener('change', (e) => {
+              document.getElementById('captionOptions').style.display = e.target.checked ? 'block' : 'none';
+            });
+          }
 
           confirmButton.disabled = false;
 
           document.getElementById('confirmQualityButton').addEventListener('click', async () => {
-            const selectedVideo = document.querySelector('input[name="videoQuality"]:checked');
-            const selectedAudioTracks = Array.from(document.querySelectorAll('input[name="audioTracks"]:checked'))
-              .map(checkbox => checkbox.getAttribute('data-format'));
-
-            // Get caption options
-            const downloadCaptions = document.getElementById('downloadCaptions').checked;
-            const embedCaptions = document.getElementById('embedCaptions').checked;
-            const selectedLangs = document.getElementById('captionLangs').value
-              .split(',')
-              .map(lang => lang.trim())
-              .filter(lang => lang); // Filter out empty strings
-
-            if (!selectedVideo || selectedAudioTracks.length === 0) {
-              alert('Please select video quality and at least one audio track.');
-              return;
-            }
-
-            const videoFormat = selectedVideo.getAttribute('data-format');
-            const savePath = await window.electronAPI.promptSaveLocation();
+            const isAudioMode = document.querySelector('input[name="downloadMode"][value="audio"]').checked;
             
-            if (savePath) {
-              qualityDialog.style.display = 'none';
-              progressBar.style.display = 'block';
-              progressDetails.style.display = 'block';
-
-              console.log('Starting download...', { 
-                videoFormat, 
-                audioTracks: selectedAudioTracks,
-                captions: downloadCaptions ? {
-                  embed: embedCaptions,
-                  languages: selectedLangs
-                } : null
-              });
+            if (isAudioMode) {
+              const selectedAudio = document.querySelector('input[name="audioTracks"]:checked');
+              if (!selectedAudio) {
+                alert(window.translations.selectAudioQualityError);
+                return;
+              }
+              const audioFormat = selectedAudio.getAttribute('data-format');
+              const savePath = await window.electronAPI.promptSaveLocation();
               
-              window.electronAPI.downloadYouTubeVideo(
-                url, 
-                savePath, 
-                videoFormat, 
-                selectedAudioTracks,
-                downloadCaptions ? {
-                  embed: embedCaptions,
-                  languages: selectedLangs
-                } : null
-              );
+              if (savePath) {
+                qualityDialog.style.display = 'none';
+                progressBar.style.display = 'block';
+                progressDetails.style.display = 'block';
+
+                console.log('Starting audio download...', { audioFormat });
+                window.electronAPI.downloadYouTubeVideo(
+                  url, 
+                  savePath, 
+                  audioFormat,  // Use selected format instead of 'bestaudio'
+                  [], 
+                  null,
+                  true
+                );
+              }
+            } else {
+              const selectedVideo = document.querySelector('input[name="videoQuality"]:checked');
+              const selectedAudioTracks = Array.from(document.querySelectorAll('input[name="audioTracks"]:checked'))
+                .map(checkbox => checkbox.getAttribute('data-format'));
+
+              // Get caption options
+              const downloadCaptions = document.getElementById('downloadCaptions').checked;
+              const embedCaptions = document.getElementById('embedCaptions').checked;
+              const selectedLangs = document.getElementById('captionLangs').value
+                .split(',')
+                .map(lang => lang.trim())
+                .filter(lang => lang); // Filter out empty strings
+
+              if (!selectedVideo || selectedAudioTracks.length === 0) {
+                alert(window.translations.selectVideoAndAudioError);
+                return;
+              }
+
+              const videoFormat = selectedVideo.getAttribute('data-format');
+              const savePath = await window.electronAPI.promptSaveLocation();
+              
+              if (savePath) {
+                qualityDialog.style.display = 'none';
+                progressBar.style.display = 'block';
+                progressDetails.style.display = 'block';
+
+                console.log('Starting download...', { 
+                  videoFormat, 
+                  audioTracks: selectedAudioTracks,
+                  captions: downloadCaptions ? {
+                    embed: embedCaptions,
+                    languages: selectedLangs
+                  } : null
+                });
+                
+                window.electronAPI.downloadYouTubeVideo(
+                  url, 
+                  savePath, 
+                  videoFormat, 
+                  selectedAudioTracks,
+                  downloadCaptions ? {
+                    embed: embedCaptions,
+                    languages: selectedLangs
+                  } : null
+                );
+              }
             }
           });
         } catch (error) {
@@ -194,8 +258,15 @@
         loadTranslations();
 
         document.getElementById('downloadButton').addEventListener('click', async () => {
-          resetProgressBar(); // Reset progress bar before starting a new download
+          resetProgressBar();
           const url = document.getElementById('urlInput').value;
+
+          // Validate URL
+          if (!url.includes('youtube.com') && !url.includes('youtu.be')) {
+            const errorMessage = document.getElementById('errorMessage');
+            errorMessage.style.display = 'block';
+            return;
+          }
 
           console.log(`URL: ${url}`);
           const errorMessage = document.getElementById('errorMessage');
@@ -218,10 +289,10 @@
           // Check if we're in the ffmpeg phase
           if (data.status === 'encoding') {
             progressBar.classList.add('encoding-progress');
-            statusText.textContent = 'Encoding video and embedding subtitles...';
+            statusText.textContent = window.translations.encodingStatus;
           } else {
             progressBar.classList.remove('encoding-progress');
-            statusText.textContent = 'Downloading...';
+            statusText.textContent = window.translations.downloadingStatus;
           }
           
           progressBar.value = data.progress;
@@ -230,7 +301,7 @@
           if (data.progress === 100) {
             progressBar.style.backgroundColor = 'green';
             progressBar.classList.remove('encoding-progress');
-            statusText.textContent = 'Download complete!';
+            statusText.textContent = window.translations.downloadComplete;
           }
         });
       });

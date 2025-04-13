@@ -338,21 +338,27 @@ ipcMain.handle('fetch-video-resolutions', async (event, url) => {
   });
 });
 
-ipcMain.on('download-youtube-video', async (event, url, savePath, videoFormat, audioFormats, captionOptions) => {
+ipcMain.on('download-youtube-video', async (event, url, savePath, videoFormat, audioFormats, captionOptions, isAudioOnly = false) => {
   try {
-    console.log('Download started with:', { url, savePath, videoFormat, audioFormats, captionOptions });
     const ytDlpPath = await ensureYtDlpExists();
     const { ffmpeg: ffmpegPath } = await ensureFfmpegExists();
     
-    const formatString = [videoFormat, ...audioFormats].join('+');
-    
+    let formatString;
+    if (isAudioOnly) {
+      formatString = audioFormats[0];
+    } else {
+      // Only use '+' for multiple audio tracks
+      formatString = audioFormats.length === 1 
+        ? `${videoFormat}+${audioFormats[0]}`
+        : [videoFormat, ...audioFormats].join('+');
+    }
+
     const args = [
       '-f', formatString,
       '--audio-multistream',
       '--ffmpeg-location', ffmpegPath
     ];
 
-    // Add caption arguments if enabled
     if (captionOptions) {
       args.push('--write-subs', '--write-auto-subs');
       if (captionOptions.languages.length > 0) {
@@ -363,12 +369,7 @@ ipcMain.on('download-youtube-video', async (event, url, savePath, videoFormat, a
       }
     }
 
-    args.push(
-      '--newline',
-      '--progress',
-      '-o', savePath,
-      url
-    );
+    args.push('-o', savePath, url);
     
     console.log('Spawning yt-dlp with args:', args);
     const ytDlpProcess = spawn(ytDlpPath, args, { shell: process.platform === 'win32' });
