@@ -14,16 +14,16 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
+    runs-on: self-hosted
 
     strategy:
       matrix:
-        os: [macos-latest, macos-latest-xlarge, ubuntu-latest, windows-latest]
+        os: [macos, ubuntu, windows]
         node-version: [18.x]
         include:
-          - os: macos-latest
+          - os: macos
             arch: arm64
-          - os: macos-latest-xlarge
+          - os: macos
             arch: x64
 
     steps:
