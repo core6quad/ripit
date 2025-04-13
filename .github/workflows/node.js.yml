@@ -10,6 +10,10 @@ jobs:
   build:
     runs-on: [self-hosted, linux]
 
+    strategy:
+      matrix:
+        target: [linux, win, mac]
+
     steps:
     - uses: actions/checkout@v4
     
@@ -21,15 +25,37 @@ jobs:
     
     - name: Install dependencies
       run: npm install
-    
-    - name: Build
-      run: npm run make
 
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y wine64 rpm
+
+    - name: Build
+      run: npm run make -- --platform=${{ matrix.target }}
+      
     - name: Upload Linux artifacts
+      if: matrix.target == 'linux'
       uses: actions/upload-artifact@v4
       with:
         name: linux-build
         path: |
           out/make/**/*.deb
           out/make/**/*.rpm
+        if-no-files-found: error
+
+    - name: Upload Windows artifacts
+      if: matrix.target == 'win'
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-build
+        path: out/make/**/*.exe
+        if-no-files-found: error
+
+    - name: Upload macOS artifacts
+      if: matrix.target == 'mac'
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-build
+        path: out/make/**/*.dmg
         if-no-files-found: error
