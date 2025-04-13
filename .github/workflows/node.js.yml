@@ -8,13 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: self-hosted
-    runs-on: [ linux ]
-
-    strategy:
-      matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
-        node-version: [18.x]
+    runs-on: [self-hosted, linux]
 
     steps:
     - uses: actions/checkout@v4
