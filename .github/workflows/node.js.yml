@@ -29,6 +29,12 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
+    - name: Install system dependencies
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y rpm
+
     - name: Set up Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v4
       with:
@@ -42,6 +48,7 @@ jobs:
       run: npm run make
       env:
         APPLE_ARCH: ${{ matrix.arch || 'x64' }}
+        ELECTRON_BUILDER_EXTRA_ARGS: ${{ runner.os != 'Linux' && '--linux deb zip' || '' }}
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
