@@ -3,8 +3,14 @@ name: Build Electron App
 on:
   push:
     branches: [ master ]
+    tags: ['v*']
   pull_request:
     branches: [ master ]
+
+# Prevent multiple deployments running simultaneously
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -12,8 +18,13 @@ jobs:
 
     strategy:
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
+        os: [macos-latest, macos-latest-xlarge, ubuntu-latest, windows-latest]
         node-version: [18.x]
+        include:
+          - os: macos-latest
+            arch: arm64
+          - os: macos-latest-xlarge
+            arch: x64
 
     steps:
     - uses: actions/checkout@v4
@@ -29,11 +40,13 @@ jobs:
     
     - name: Build
       run: npm run make
+      env:
+        APPLE_ARCH: ${{ matrix.arch }}
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ matrix.os }}-build
+        name: ${{ matrix.os }}-${{ matrix.arch || 'default' }}-build
         path: |
           out/make/**/*.deb
           out/make/**/*.rpm
@@ -41,3 +54,27 @@ jobs:
           out/make/**/*.dmg
           out/make/**/*.exe
         if-no-files-found: ignore
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          **/*.deb
+          **/*.rpm
+          **/*.zip
+          **/*.dmg
+          **/*.exe
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
