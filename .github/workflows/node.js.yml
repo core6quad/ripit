@@ -3,41 +3,22 @@ name: Build Electron App
 on:
   push:
     branches: [ master ]
-    tags: ['v*']
   pull_request:
     branches: [ master ]
 
-# Prevent multiple deployments running simultaneously
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   build:
-    # Add if condition to run on all pushes and PRs
-    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-    runs-on: [self-hosted, linux, x64] # Ensure the runner has the required tags
+    runs-on: ${{ linux }}
 
     strategy:
       matrix:
-        os: [macos, ubuntu, windows]
+        os: [macos-latest, ubuntu-latest, windows-latest]
         node-version: [18.x]
-        include:
-          - os: macos
-            arch: arm64
-          - os: macos
-            arch: x64
 
     steps:
     - uses: actions/checkout@v4
     
-    - name: Install system dependencies
-      if: runner.os == 'Linux'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y rpm
-
-    - name: Set up Node.js ${{ matrix.node-version }}
+    - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
@@ -48,14 +29,11 @@ jobs:
     
     - name: Build
       run: npm run make
-      env:
-        APPLE_ARCH: ${{ matrix.arch || 'x64' }}
-        ELECTRON_BUILDER_EXTRA_ARGS: ${{ runner.os != 'Linux' && '--linux deb zip' || '' }}
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ matrix.os }}-${{ matrix.arch || 'default' }}-build
+        name: ${{ matrix.os }}-build
         path: |
           out/make/**/*.deb
           out/make/**/*.rpm
@@ -63,46 +41,3 @@ jobs:
           out/make/**/*.dmg
           out/make/**/*.exe
         if-no-files-found: ignore
-
-  build-release:
-    # New job specifically for tag builds
-    if: startsWith(github.ref, 'refs/tags/')
-    runs-on: [self-hosted, linux, x64]
-    permissions:
-      contents: write  # Explicit permission to create releases
-      packages: read   # Permission to read packages if needed
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y rpm
-
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18.x'
-        cache: 'npm'
-    
-    - name: Install dependencies
-      run: npm install
-    
-    - name: Build Release
-      run: npm run make
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: |
-          out/make/**/*.deb
-          out/make/**/*.rpm
-          out/make/**/*.zip
-          out/make/**/*.dmg
-          out/make/**/*.exe
-        draft: false
-        prerelease: false
-        generate_release_notes: true
-        token: ${{ secrets.GITHUB_TOKEN }}  # Use default token instead of custom GH_TOKEN
