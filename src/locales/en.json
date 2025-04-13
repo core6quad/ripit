@@ -1,0 +1,15 @@
+{
+  "title": "Ripit",
+  "downloadButton": "Download",
+  "settingsLink": "Settings",
+  "invalidUrl": "Invalid URL",
+  "loadingResolutions": "Loading available resolutions...",
+  "confirmButton": "Confirm",
+  "idleStatus": "Idle",
+  "runningBinaryStatus": "Running binary",
+  "retrievingYtDlp": "Retrieving yt-dlp",
+  "retrievingFfmpeg": "Retrieving FFMPEG",
+  "downloadComplete": "Download complete!",
+  "downloading": "Downloading...",
+  "listWarning": "Warning: The URL contains a 'list' parameter, which might cause issues. It will be removed."
+}

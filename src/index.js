@@ -1,9 +1,10 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const { spawn } = require('child_process');
 const path = require('node:path');
 const fs = require('fs');
 const https = require('https');
 const os = require('os');
+const extract = require('extract-zip'); // Ensure you install this package
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
@@ -47,6 +48,70 @@ ipcMain.handle('prompt-save-location', async () => {
     filters: [{ name: 'Videos', extensions: ['mp4'] }],
   });
   return canceled ? null : filePath;
+});
+
+const settingsPath = path.join(app.getPath('userData'), 'settings.json');
+
+ipcMain.handle('browse-for-folder', async () => {
+  const { canceled, filePaths } = await dialog.showOpenDialog({
+    properties: ['openDirectory'],
+  });
+  return canceled ? null : filePaths[0];
+});
+
+ipcMain.handle('browse-for-file', async () => {
+  const { canceled, filePaths } = await dialog.showOpenDialog({
+    properties: ['openFile'],
+  });
+  return canceled ? null : filePaths[0];
+});
+
+ipcMain.on('save-settings', (event, settings) => {
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+  console.log('Settings saved:', settings);
+});
+
+ipcMain.handle('load-settings', async () => {
+  if (fs.existsSync(settingsPath)) {
+    return JSON.parse(fs.readFileSync(settingsPath));
+  }
+  return {
+    downloadPathOption: 'ask',
+    defaultDownloadPath: '',
+    ytDlpOption: 'auto',
+    ytDlpPath: '',
+    ffmpegOption: 'auto',
+    ffmpegPath: '',
+    languageOption: 'system',
+    customLanguage: 'en',
+  };
+});
+
+ipcMain.on('open-external', (event, url) => {
+  shell.openExternal(url);
+});
+
+ipcMain.handle('get-translations', () => {
+  const settings = fs.existsSync(settingsPath)
+    ? JSON.parse(fs.readFileSync(settingsPath))
+    : { languageOption: 'system', customLanguage: 'en' };
+
+  const locale =
+    settings.languageOption === 'custom' ? settings.customLanguage : app.getLocale();
+  const localesPath = path.join(__dirname, 'locales');
+  const defaultLocale = 'en';
+
+  try {
+    const translationsPath = path.join(localesPath, `${locale}.json`);
+    if (fs.existsSync(translationsPath)) {
+      return JSON.parse(fs.readFileSync(translationsPath, 'utf-8'));
+    }
+  } catch (error) {
+    console.error(`Error loading translations for locale ${locale}:`, error);
+  }
+
+  // Fallback to English if locale not found
+  return JSON.parse(fs.readFileSync(path.join(localesPath, `${defaultLocale}.json`), 'utf-8'));
 });
 
 function downloadFile(url, callback) {
@@ -106,6 +171,8 @@ function ensureYtDlpExists() {
   const ytDlpPath = path.join(os.tmpdir(), process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp');
 
   if (!fs.existsSync(ytDlpPath)) {
+    ipcMain.emit('yt-dlp-download');
+
     // Determine the correct architecture
     const arch = os.arch();
     let ytDlpUrl;
@@ -151,6 +218,7 @@ function ensureYtDlpExists() {
         }
         console.log(`yt-dlp downloaded to: ${ytDlpPath}`); // Debug log for file path
         resolve(ytDlpPath);
+        ipcMain.emit('download-complete');
       });
     });
   }
@@ -170,15 +238,18 @@ function ensureYtDlpExists() {
 
 function ensureFfmpegExists() {
   const ffmpegPath = path.join(os.tmpdir(), process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
+  const ffprobePath = path.join(os.tmpdir(), process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe');
 
-  if (!fs.existsSync(ffmpegPath)) {
+  if (!fs.existsSync(ffmpegPath) || !fs.existsSync(ffprobePath)) {
+    ipcMain.emit('ffmpeg-download');
+
     const ffmpegUrl = process.platform === 'win32'
       ? 'https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip'
       : process.platform === 'darwin'
       ? 'https://evermeet.cx/ffmpeg/ffmpeg'
       : 'https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz';
 
-    console.log(`Downloading ffmpeg binary from: ${ffmpegUrl}`);
+    console.log(`Downloading ffmpeg binaries from: ${ffmpegUrl}`);
 
     return new Promise((resolve, reject) => {
       downloadFile(ffmpegUrl, (err, data) => {
@@ -189,47 +260,45 @@ function ensureFfmpegExists() {
           return;
         }
 
-        // Handle zip or tar.xz extraction for Windows/Linux
         if (process.platform === 'win32' || process.platform === 'linux') {
           const tempFilePath = path.join(os.tmpdir(), 'ffmpeg_download');
           fs.writeFileSync(tempFilePath, data);
 
-          // Extract the binary
-          const extract = require('extract-zip'); // Ensure you install this package
           extract(tempFilePath, { dir: os.tmpdir() })
             .then(() => {
-              const extractedPath = path.join(os.tmpdir(), 'ffmpeg-master-latest-win64-gpl', 'bin', 'ffmpeg.exe');
-              fs.renameSync(extractedPath, ffmpegPath);
-              fs.unlinkSync(tempFilePath); // Clean up
-              console.log(`ffmpeg downloaded to: ${ffmpegPath}`);
-              resolve(ffmpegPath);
+              const extractedPath = path.join(os.tmpdir(), 'ffmpeg-master-latest-win64-gpl', 'bin');
+              fs.renameSync(path.join(extractedPath, 'ffmpeg.exe'), ffmpegPath);
+              fs.renameSync(path.join(extractedPath, 'ffprobe.exe'), ffprobePath);
+              fs.unlinkSync(tempFilePath);
+              console.log(`ffmpeg binaries extracted to: ${os.tmpdir()}`);
+              resolve({ ffmpeg: ffmpegPath, ffprobe: ffprobePath });
+              ipcMain.emit('download-complete');
             })
             .catch((extractErr) => {
               console.error(`Failed to extract ffmpeg: ${extractErr.message}`);
               reject(extractErr);
             });
         } else {
-          // For macOS, directly save the binary
           fs.writeFileSync(ffmpegPath, data);
-          fs.chmodSync(ffmpegPath, 0o755); // Ensure executable permissions
+          fs.chmodSync(ffmpegPath, 0o755);
           console.log(`ffmpeg downloaded to: ${ffmpegPath}`);
-          resolve(ffmpegPath);
+          resolve({ ffmpeg: ffmpegPath });
+          ipcMain.emit('download-complete');
         }
       });
     });
   }
 
-  console.log(`ffmpeg path resolved to: ${ffmpegPath}`);
-  return Promise.resolve(ffmpegPath);
+  console.log(`ffmpeg binaries resolved to: ${ffmpegPath}, ${ffprobePath}`);
+  return Promise.resolve({ ffmpeg: ffmpegPath, ffprobe: ffprobePath });
 }
 
 ipcMain.handle('fetch-video-resolutions', async (event, url) => {
   const ytDlpPath = await ensureYtDlpExists();
 
-  // Log the resolved path for debugging
+  console.log(`Processing URL: ${url}`);
   console.log(`Using yt-dlp at: ${ytDlpPath}`);
 
-  // Verify the file exists
   if (!fs.existsSync(ytDlpPath)) {
     throw new Error(`yt-dlp executable not found at: ${ytDlpPath}`);
   }
@@ -238,7 +307,7 @@ ipcMain.handle('fetch-video-resolutions', async (event, url) => {
 
   return new Promise((resolve, reject) => {
     try {
-      const ytDlpProcess = spawn(ytDlpPath, args, { shell: process.platform === 'win32' }); // Renamed to ytDlpProcess
+      const ytDlpProcess = spawn(ytDlpPath, args, { shell: process.platform === 'win32' });
       let output = '';
       let errorOutput = '';
 
@@ -269,28 +338,79 @@ ipcMain.handle('fetch-video-resolutions', async (event, url) => {
   });
 });
 
-ipcMain.on('download-youtube-video', async (event, { url, savePath, quality }) => {
+ipcMain.on('download-youtube-video', async (event, url, savePath, videoFormat, audioFormats, captionOptions) => {
   try {
+    console.log('Download started with:', { url, savePath, videoFormat, audioFormats, captionOptions });
     const ytDlpPath = await ensureYtDlpExists();
-    const ffmpegPath = await ensureFfmpegExists(); // Ensure ffmpeg is available
-    const args = ['-f', `${quality}+bestaudio`, '--ffmpeg-location', ffmpegPath, '-o', savePath, url];
-    const process = spawn(ytDlpPath, args);
+    const { ffmpeg: ffmpegPath } = await ensureFfmpegExists();
+    
+    const formatString = [videoFormat, ...audioFormats].join('+');
+    
+    const args = [
+      '-f', formatString,
+      '--audio-multistream',
+      '--ffmpeg-location', ffmpegPath
+    ];
 
-    process.stdout.on('data', data => {
+    // Add caption arguments if enabled
+    if (captionOptions) {
+      args.push('--write-subs', '--write-auto-subs');
+      if (captionOptions.languages.length > 0) {
+        args.push('--sub-lang', captionOptions.languages.join(','));
+      }
+      if (captionOptions.embed) {
+        args.push('--embed-subs');
+      }
+    }
+
+    args.push(
+      '--newline',
+      '--progress',
+      '-o', savePath,
+      url
+    );
+    
+    console.log('Spawning yt-dlp with args:', args);
+    const ytDlpProcess = spawn(ytDlpPath, args, { shell: process.platform === 'win32' });
+
+    ytDlpProcess.stdout.on('data', data => {
       const output = data.toString();
-      const progress = output.match(/(\d+\.\d+)%/);
-      if (progress) {
+      console.log('yt-dlp download output:', output);
+      
+      // Detect merging/encoding phase
+      if (output.includes('[Merger]') || output.includes('[EmbedSubtitle]')) {
         event.sender.send('download-progress', {
-          progress: parseFloat(progress[1]),
-          eta: (output.match(/ETA\s+(\S+)/) || [])[1] || '--',
-          speed: (output.match(/at\s+(\S+\/s)/) || [])[1] || '--'
+          progress: 99,
+          eta: '--',
+          speed: '--',
+          status: 'encoding'
+        });
+        return;
+      }
+      
+      const progressMatch = output.match(/\[download\]\s*([0-9.]+)%/);
+      if (progressMatch) {
+        const progress = parseFloat(progressMatch[1]);
+        const etaMatch = output.match(/ETA\s+([0-9:]+)/);
+        const speedMatch = output.match(/at\s+([\d.]+[KMG]iB\/s)/);
+
+        event.sender.send('download-progress', {
+          progress: progress,
+          eta: etaMatch ? etaMatch[1] : '--',
+          speed: speedMatch ? speedMatch[1] : '--',
+          status: 'downloading'
         });
       }
     });
 
-    process.stderr.on('data', data => console.error(data.toString()));
+    ytDlpProcess.stderr.on('data', data => {
+      const error = data.toString();
+      console.error('yt-dlp download error:', error);
+      event.sender.send('download-error', error);
+    });
 
-    process.on('close', code => {
+    ytDlpProcess.on('close', code => {
+      console.log('Download process exited with code:', code);
       if (code === 0) {
         event.sender.send('download-progress', { progress: 100, eta: '0s', speed: '0B/s' });
       } else {
@@ -298,13 +418,15 @@ ipcMain.on('download-youtube-video', async (event, { url, savePath, quality }) =
       }
     });
   } catch (error) {
+    console.error('Download error:', error);
     event.sender.send('download-error', error.message);
   }
 });
 
 function parseResolutions(output) {
   const lines = output.split('\n');
-  const resolutions = [];
+  const videoFormats = [];
+  const audioFormats = [];
   let isHeaderPassed = false;
 
   lines.forEach((line) => {
@@ -315,16 +437,29 @@ function parseResolutions(output) {
 
     if (!isHeaderPassed) return;
 
-    const match = line.match(/^\s*(\S+)\s+(\S+)\s+(\d+x\d+|\d+p|\d+k|audio only)?\s+.*?\s+(\S+)?$/);
+    const match = line.match(/^\s*(\S+)\s+(\S+)\s+(\d+x\d+|\d+p|\d+k|audio only)?\s+(.*?)\s+(\S+)?$/);
     if (match) {
       const format = match[1];
       const extension = match[2];
       const resolution = match[3] || 'Unknown';
-      const size = match[4] || 'Unknown';
+      const description = match[4] || '';
+      const size = match[5] || 'Unknown';
 
-      resolutions.push({ format, extension, resolution, size });
+      if (resolution === 'audio only' && extension === 'm4a') {
+        audioFormats.push({ format, extension, resolution, description, size });
+      } else if (resolution !== 'audio only' && 
+                 extension === 'mp4' && 
+                 description.includes('avc1')) {  // Only H.264/AVC video codec
+        videoFormats.push({ format, extension, resolution, size });
+      }
     }
   });
 
-  return resolutions;
+  // Sort video formats by quality (assuming resolution format like "1080p", "720p", etc.)
+  videoFormats.sort((a, b) => {
+    const getPixels = (res) => parseInt(res.resolution.match(/\d+/)[0]);
+    return getPixels(b) - getPixels(a);
+  });
+
+  return { videoFormats, audioFormats };
 }

@@ -1,0 +1,15 @@
+{
+  "title": "Ripit",
+  "downloadButton": "Скачать",
+  "settingsLink": "Настройки",
+  "invalidUrl": "Неверный URL",
+  "loadingResolutions": "Загрузка доступных разрешений...",
+  "confirmButton": "Подтвердить",
+  "idleStatus": "Ожидание",
+  "runningBinaryStatus": "Запуск бинарного файла",
+  "retrievingYtDlp": "Загрузка yt-dlp",
+  "retrievingFfmpeg": "Загрузка FFMPEG",
+  "downloadComplete": "Загрузка завершена!",
+  "downloading": "Загрузка...",
+  "listWarning": "Предупреждение: URL содержит параметр 'list', который может вызвать проблемы. Он будет удален."
+}
