@@ -4,6 +4,14 @@ body {
   margin: auto;
   max-width: 38rem;
   padding: 2rem;
+  background-color: #f4f4f9; /* Light background color */
+  color: #333; /* Dark text color */
+}
+
+h1 {
+  text-align: center;
+  color: #444; /* Slightly darker heading color */
+  margin-bottom: 1.5rem;
 }
 
 #urlInput {
@@ -11,15 +19,72 @@ body {
   padding: 0.5rem;
   margin-bottom: 1rem;
   font-size: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
 }
 
 #downloadButton {
   padding: 0.5rem 1rem;
   font-size: 1rem;
   cursor: pointer;
+  background-color: #007bff; /* Blue button */
+  color: white;
+  border: none;
+  border-radius: 4px;
+  transition: background-color 0.3s ease;
+}
+
+#downloadButton:hover {
+  background-color: #0056b3; /* Darker blue on hover */
 }
 
 #progressBar {
   margin-top: 1rem;
   height: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+#progressDetails {
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+  color: #555;
+}
+
+#errorMessage {
+  color: red;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+}
+
+#qualityDialog {
+  display: none;
+  border: 1px solid #ccc;
+  padding: 1rem;
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+#confirmQualityButton {
+  padding: 0.5rem 1rem;
+  font-size: 1rem;
+  cursor: pointer;
+  background-color: #28a745; /* Green button */
+  color: white;
+  border: none;
+  border-radius: 4px;
+  transition: background-color 0.3s ease;
+}
+
+#confirmQualityButton:hover {
+  background-color: #218838; /* Darker green on hover */
+}
+
+#statusText {
+  margin-top: 1rem;
+  font-size: 1rem;
+  text-align: center;
+  color: #666;
 }
