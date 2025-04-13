@@ -6,24 +6,39 @@
     <link rel="stylesheet" href="index.css" />
   </head>
   <body>
-    <h1>Ripit</h1>
-    <div>
-      <input type="text" id="urlInput" placeholder="Enter URL to download" />
-      <button id="downloadButton">Download</button>
-      <p id="errorMessage" style="color: red; display: none;">Invalid URL</p>
-      <progress id="progressBar" value="0" max="100" style="width: 100%; display: none;"></progress>
-      <p id="progressDetails" style="display: none;">0% | ETA: -- | Speed: --</p>
-    </div>
-    <div id="qualityDialog" style="display: none; border: 1px solid #ccc; padding: 1rem; background: #f9f9f9;">
-      <h3>Select Video Quality</h3>
-      <div id="resolutionOptions">
-        <p>Loading available resolutions...</p>
+    <div id="titleBar">
+      <div id="title">Ripit</div>
+      <div id="windowControls">
+        <button id="minimizeButton">_</button>
+        <button id="maximizeButton">⬜</button>
+        <button id="closeButton">✕</button>
       </div>
-      <button id="confirmQualityButton" disabled>Confirm</button>
     </div>
-    <p id="statusText" style="margin-top: 1rem;">Idle</p>
+    <div id="content">
+      <h1>Ripit</h1>
+      <div>
+        <input type="text" id="urlInput" placeholder="Enter URL to download" />
+        <button id="downloadButton">Download</button>
+        <p id="errorMessage" style="color: red; display: none;">Invalid URL</p>
+        <progress id="progressBar" value="0" max="100" style="width: 100%; display: none;"></progress>
+        <p id="progressDetails" style="display: none;">0% | ETA: -- | Speed: --</p>
+      </div>
+      <div id="qualityDialog" style="display: none; border: 1px solid #ccc; padding: 1rem; background: #f9f9f9;">
+        <h3>Select Video Quality</h3>
+        <div id="resolutionOptions">
+          <p>Loading available resolutions...</p>
+        </div>
+        <button id="confirmQualityButton" disabled>Confirm</button>
+      </div>
+      <p id="statusText" style="margin-top: 1rem;">Idle</p>
+    </div>
     <script>
       let lastUpdateTime = 0;
+
+      // Notify the main process when content changes
+      function notifyContentUpdated() {
+        window.electronAPI.notifyContentUpdated();
+      }
 
       function isValidUrl(url) {
         try {
@@ -44,6 +59,7 @@
         const confirmButton = document.getElementById('confirmQualityButton');
         resolutionOptions.innerHTML = '<p>Loading available resolutions...</p>';
         confirmButton.disabled = true;
+        notifyContentUpdated(); // Notify content update
         try {
           console.log(`Fetching resolutions for URL: ${url}`);
           const resolutions = await window.electronAPI.fetchVideoResolutions(url);
@@ -58,6 +74,7 @@
           if (uniqueResolutions.length === 0) {
             resolutionOptions.innerHTML = '<p>No supported resolutions available.</p>';
             console.log('No supported resolutions available.');
+            notifyContentUpdated(); // Notify content update
             return;
           }
 
@@ -75,9 +92,11 @@
             .join('');
           confirmButton.disabled = false;
           console.log('Resolution options populated.');
+          notifyContentUpdated(); // Notify content update
         } catch (error) {
           resolutionOptions.innerHTML = '<p>Failed to load resolutions.</p>';
           console.error('Error fetching resolutions:', error);
+          notifyContentUpdated(); // Notify content update
         }
       }
 
@@ -118,60 +137,26 @@
         statusText.textContent = 'Idle';
       }
 
-      document
-        .getElementById('downloadButton')
-        .addEventListener('click', async () => {
-          resetProgressBar(); // Reset progress bar before starting a new download
-          const url = document.getElementById('urlInput').value;
-          console.log(`URL entered: ${url}`);
-          const errorMessage = document.getElementById('errorMessage');
-          const qualityDialog = document.getElementById('qualityDialog');
-          if (isValidUrl(url)) {
-            if (isYouTubeUrl(url)) {
-              console.log('Valid YouTube URL detected.');
-              errorMessage.style.display = 'none';
+      document.getElementById('downloadButton').addEventListener('click', async () => {
+        const url = document.getElementById('urlInput').value;
+        if (!isValidUrl(url)) {
+          alert('Invalid URL');
+          return;
+        }
+        if (!isYouTubeUrl(url)) {
+          alert('This URL is not a valid YouTube link.');
+          return;
+        }
 
-              qualityDialog.style.display = 'block';
-              await populateResolutions(url);
+        // Open the resolution selector dialog
+        window.electronAPI.openResolutionDialog(url);
+      });
 
-              document
-                .getElementById('confirmQualityButton')
-                .addEventListener('click', async () => {
-                  const selectedRadio = document.querySelector('input[name="quality"]:checked');
-                  const selectedFormat = selectedRadio ? selectedRadio.getAttribute('data-format') : null;
-                  const selectedResolution = selectedRadio ? selectedRadio.value : null;
-
-                  if (!selectedFormat || !selectedResolution) {
-                    alert('Please select a resolution.');
-                    console.log('No resolution or format selected.');
-                    return;
-                  }
-
-                  console.log(`Selected format: ${selectedFormat}, resolution: ${selectedResolution}`);
-                  const savePath = await window.electronAPI.promptSaveLocation();
-                  console.log(`Save path selected: ${savePath}`);
-                  if (savePath) {
-                    const progressBar = document.getElementById('progressBar');
-                    const progressDetails = document.getElementById('progressDetails');
-                    qualityDialog.style.display = 'none'; // Close the dialog
-                    progressBar.style.display = 'block';
-                    progressDetails.style.display = 'block';
-
-                    console.log('Starting download...');
-                    window.electronAPI.downloadYouTubeVideo(url, savePath, selectedFormat, selectedResolution);
-                  }
-                });
-            } else {
-              console.log('Invalid YouTube URL.');
-              errorMessage.textContent = 'This URL is not a valid YouTube link.';
-              errorMessage.style.display = 'block';
-            }
-          } else {
-            console.log('Invalid URL entered.');
-            errorMessage.textContent = 'Invalid URL';
-            errorMessage.style.display = 'block';
-          }
-        });
+      // Handle resolution selection
+      window.electronAPI.onResolutionSelected((resolution) => {
+        console.log('Resolution selected in main window:', resolution);
+        // Proceed with the download logic here
+      });
 
       window.electronAPI.onDownloadProgress((data) => {
         const progressBar = document.getElementById('progressBar');
@@ -198,6 +183,19 @@
       window.electronAPI.onDownloadError((message) => {
         alert(`Error: ${message}`);
         resetProgressBar(); // Reset progress bar on error
+      });
+
+      // Add event listeners for custom window controls
+      document.getElementById('minimizeButton').addEventListener('click', () => {
+        window.electronAPI.minimizeWindow();
+      });
+
+      document.getElementById('maximizeButton').addEventListener('click', () => {
+        window.electronAPI.maximizeWindow();
+      });
+
+      document.getElementById('closeButton').addEventListener('click', () => {
+        window.electronAPI.closeWindow();
       });
     </script>
   </body>

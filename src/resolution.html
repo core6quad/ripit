@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Select Resolution</title>
+    <link rel="stylesheet" href="index.css" />
+    <style>
+      body {
+        margin: 0;
+        padding: 1rem;
+        font-family: Arial, sans-serif;
+        background-color: rgba(255, 255, 255, 0.9);
+        overflow-y: auto; /* Allow scrolling if content overflows */
+      }
+
+      #titleBar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background-color: rgba(0, 0, 0, 0.6); /* Semi-transparent title bar */
+        color: white;
+        padding: 0.5rem 1rem;
+        -webkit-app-region: drag; /* Allow dragging the window */
+        margin-bottom: 1rem; /* Add spacing below the title bar */
+      }
+
+      #resolutionOptions {
+        max-height: 300px; /* Limit height of resolution list */
+        overflow-y: auto; /* Add scrolling for long lists */
+        border: 1px solid #ccc;
+        padding: 0.5rem;
+        background: #fff;
+        border-radius: 4px;
+      }
+
+      button {
+        margin-top: 1rem;
+        padding: 0.5rem 1rem;
+        font-size: 1rem;
+        cursor: pointer;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        transition: background-color 0.3s ease;
+      }
+
+      button:hover {
+        background-color: #0056b3;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="titleBar">
+      <div>Select Resolution</div>
+    </div>
+    <div id="resolutionOptions">
+      <p>Loading available resolutions...</p>
+    </div>
+    <button id="confirmQualityButton" disabled>Confirm</button>
+    <script>
+      const resolutionOptions = document.getElementById('resolutionOptions');
+      const confirmButton = document.getElementById('confirmQualityButton');
+      let selectedResolution = null;
+
+      // Receive the URL from the main process
+      window.electronAPI.on('set-url', async (_, url) => {
+        resolutionOptions.innerHTML = '<p>Loading available resolutions...</p>';
+        confirmButton.disabled = true;
+        try {
+          const resolutions = await window.electronAPI.fetchVideoResolutions(url);
+          resolutionOptions.innerHTML = resolutions
+            .map(
+              (res) =>
+                `<label>
+                  <input type="radio" name="quality" value="${res.format}" />
+                  ${res.resolution} (${res.size})
+                </label><br />`
+            )
+            .join('');
+          confirmButton.disabled = false;
+        } catch (error) {
+          resolutionOptions.innerHTML = '<p>Failed to load resolutions.</p>';
+        }
+      });
+
+      // Handle resolution selection
+      resolutionOptions.addEventListener('change', (event) => {
+        selectedResolution = event.target.value;
+      });
+
+      confirmButton.addEventListener('click', () => {
+        if (selectedResolution) {
+          window.electronAPI.send('resolution-selected', selectedResolution); // Send the selected resolution to the main process
+          window.close(); // Close the resolution selector window
+        } else {
+          alert('Please select a resolution.');
+        }
+      });
+    </script>
+  </body>
+</html>

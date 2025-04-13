@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, screen } = require('electron'); // Import screen module
 const { spawn } = require('child_process');
 const path = require('node:path');
 const fs = require('fs');
@@ -10,22 +10,129 @@ if (require('electron-squirrel-startup')) {
   app.quit();
 }
 
+let resolutionWindow = null;
+
+const createResolutionWindow = (url) => {
+  if (resolutionWindow) {
+    resolutionWindow.focus();
+    return;
+  }
+
+  resolutionWindow = new BrowserWindow({
+    width: 600,
+    height: 400,
+    title: 'Select Resolution',
+    parent: BrowserWindow.getFocusedWindow(), // Make it a child of the main window
+    modal: true, // Make it a modal window
+    transparent: true,
+    frame: false, // Custom frame for a modern look
+    resizable: true, // Allow resizing for dynamic adjustments
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+    },
+  });
+
+  resolutionWindow.loadFile(path.join(__dirname, 'resolution.html'));
+
+  // Pass the URL to the resolution window
+  resolutionWindow.webContents.once('did-finish-load', () => {
+    resolutionWindow.webContents.send('set-url', url);
+  });
+
+  resolutionWindow.on('closed', () => {
+    resolutionWindow = null;
+  });
+};
+
+ipcMain.on('open-resolution-dialog', (event, url) => {
+  createResolutionWindow(url);
+});
+
+ipcMain.on('resolution-selected', (event, resolution) => {
+  console.log('Selected resolution:', resolution);
+  if (resolutionWindow) {
+    resolutionWindow.close();
+  }
+});
+
 const createWindow = () => {
   const mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
     title: 'Ripit',
+    transparent: true, // Keep the window transparent
+    frame: false, // Custom frame for a modern look
+    resizable: true, // Allow resizing for dynamic adjustments
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },
   });
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
-  //mainWindow.webContents.openDevTools();
+
+  // Function to resize the window dynamically
+  const resizeWindowToContent = () => {
+    mainWindow.webContents.executeJavaScript(`
+      (() => {
+        const contentElement = document.getElementById('content'); // Use a unique variable name
+        if (!contentElement) {
+          throw new Error('Content element not found');
+        }
+        const rect = contentElement.getBoundingClientRect();
+        return { width: rect.width, height: rect.height };
+      })();
+    `).then(({ width, height }) => {
+      const bounds = mainWindow.getBounds();
+      const screenBounds = screen.getPrimaryDisplay().workAreaSize;
+
+      // Adjust the window size to fit the content
+      mainWindow.setBounds({
+        x: Math.max(0, Math.round((screenBounds.width - width) / 2)),
+        y: Math.max(0, Math.round((screenBounds.height - height) / 2)),
+        width: Math.round(width + bounds.width - mainWindow.getContentBounds().width),
+        height: Math.round(height + bounds.height - mainWindow.getContentBounds().height),
+      });
+    }).catch((err) => {
+      console.error('Error resizing window:', err);
+    });
+  };
+
+  // Resize the window when the page finishes loading
+  mainWindow.webContents.once('did-finish-load', resizeWindowToContent);
+
+  // Listen for content updates from the renderer process
+  ipcMain.on('content-updated', resizeWindowToContent);
+
+  // IPC handlers for window controls
+  ipcMain.handle('window-minimize', () => mainWindow.minimize());
+  ipcMain.handle('window-maximize', () => {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+  });
+  ipcMain.handle('window-close', () => mainWindow.close());
 };
 
 app.whenReady().then(() => {
   createWindow();
+
+  // Add a global keyboard shortcut for toggling developer tools
+  app.on('browser-window-focus', () => {
+    const { globalShortcut } = require('electron');
+    globalShortcut.register('Control+Shift+I', () => {
+      const focusedWindow = BrowserWindow.getFocusedWindow();
+      if (focusedWindow) {
+        focusedWindow.webContents.toggleDevTools();
+      }
+    });
+  });
+
+  app.on('browser-window-blur', () => {
+    const { globalShortcut } = require('electron');
+    globalShortcut.unregister('Control+Shift+I');
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

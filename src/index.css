@@ -1,11 +1,45 @@
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
     Arial, sans-serif;
-  margin: auto;
-  max-width: 38rem;
-  padding: 2rem;
-  background-color: #f4f4f9; /* Light background color */
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(255, 255, 255, 0.8); /* Semi-transparent white background */
   color: #333; /* Dark text color */
+  overflow: hidden; /* Prevent scrollbars */
+}
+
+#titleBar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: rgba(0, 0, 0, 0.6); /* Semi-transparent title bar */
+  color: white;
+  padding: 0.5rem 1rem;
+  -webkit-app-region: drag; /* Allow dragging the window */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2); /* Subtle border for separation */
+  z-index: 10;
+}
+
+#content {
+  width: 90%;
+  max-width: 30rem;
+  padding: 1rem;
+  background-color: rgba(255, 255, 255, 0.9); /* Slightly more opaque content background */
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2); /* Subtle shadow for floating effect */
+  margin-top: 3rem; /* Push content below the title bar */
+  overflow: hidden; /* Prevent scrollbars inside the content area */
+  max-height: 100vh; /* Prevent content from exceeding the viewport height */
+  box-sizing: border-box; /* Include padding and border in height calculations */
 }
 
 h1 {
@@ -87,4 +121,28 @@ h1 {
   font-size: 1rem;
   text-align: center;
   color: #666;
+}
+
+#windowControls {
+  display: flex;
+  gap: 0.5rem;
+}
+
+#windowControls button {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0.2rem 0.5rem;
+  -webkit-app-region: no-drag; /* Exclude buttons from drag region */
+}
+
+#windowControls button:hover {
+  background-color: rgba(255, 255, 255, 0.2); /* Highlight on hover */
+}
+
+#title {
+  font-size: 1rem;
+  font-weight: bold;
 }
