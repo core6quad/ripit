@@ -8,20 +8,15 @@ on:
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
-        node-version: [18.x]
+    runs-on: self-hosted
 
     steps:
     - uses: actions/checkout@v4
     
-    - name: Use Node.js ${{ matrix.node-version }}
+    - name: Use Node.js 18
       uses: actions/setup-node@v4
       with:
-        node-version: ${{ matrix.node-version }}
+        node-version: '18.x'
         cache: 'npm'
     
     - name: Install dependencies
@@ -30,14 +25,11 @@ jobs:
     - name: Build
       run: npm run make
 
-    - name: Upload artifacts
+    - name: Upload Linux artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ matrix.os }}-build
+        name: linux-build
         path: |
           out/make/**/*.deb
           out/make/**/*.rpm
-          out/make/**/*.zip
-          out/make/**/*.dmg
-          out/make/**/*.exe
-        if-no-files-found: ignore
+        if-no-files-found: error
